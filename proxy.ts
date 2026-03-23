@@ -34,25 +34,39 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // --- BLOQUE DE DIAGNÓSTICO ---
+  // 1. Obtener el usuario autenticado
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
   
   console.log("------------------------------------------");
   console.log(`Ruta solicitada: ${pathname}`);
-  console.log(`¿Usuario detectado?: ${user ? 'SÍ (' + user.email + ')' : 'NO'}`);
-  // -----------------------------
 
-  // Si no hay usuario y no es login ni register -> Al Login
+  // 2. PROTECCIÓN BÁSICA: Si no hay usuario y no es login/register -> Al Login
   if (!user && pathname !== '/login' && pathname !== '/register') {
-    console.log("ACCIÓN: Redirigiendo a /login (No autenticado)");
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Si hay usuario y trata de ir al login -> Al Dashboard
+  // 3. Si el usuario ya está autenticado y va a login/register -> Al Inicio
   if (user && (pathname === '/login' || pathname === '/register')) {
-    console.log("ACCIÓN: Redirigiendo a / (Ya autenticado)");
     return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // 4. PROTECCIÓN DE ROL: Si intenta entrar a /administracion
+  if (user && pathname.startsWith('/administracion')) {
+    // Consultamos el rol en la tabla perfiles
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', user.id)
+      .single()
+
+    console.log(`Usuario: ${user.email} | Rol detectado: ${perfil?.rol}`);
+
+    // Si no es ADMIN, lo redirigimos a la página principal
+    if (perfil?.rol !== 'ADMIN') {
+      console.log("ACCESO DENEGADO: Redirigiendo a / (No es ADMIN)");
+      return NextResponse.redirect(new URL('/', request.url))
+    }
   }
 
   console.log("ACCIÓN: Permitir paso");
